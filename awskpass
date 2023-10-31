@@ -1,0 +1,38 @@
+#!/bin/bash
+
+AWSKPASS=$(cd -- "$(dirname -- "$0")" &> /dev/null && pwd)
+LOG="$AWSKPASS/awskpass.log"
+rm $LOG
+touch $LOG
+
+function log {
+    echo "[$1] $(date): $2" >> $LOG
+}
+
+# extract vault from prompt
+PROMPT=$1
+log 'DEBUG' "called with PROMPT = $PROMPT"
+VAULT=$(echo $PROMPT | awk '{print $1}' | tr -d "'")
+log 'DEBUG' "extracted $VAULT from PROMPT"
+
+# extract target (VAULTED_PASSWORD/AWS_MFA_CODE) from prompt
+if [[ "$PROMPT" == *'password'* ]]; then
+    log 'DEBUG' 'selected VAULTED_PASSWORD as target'
+    TARGET='VAULTED_PASSWORD'
+elif [[ "$PROMPT" == *'MFA'* ]]; then
+    log 'DEBUG' 'selected AWS_MFA_CODE as target'
+    TARGET='AWS_MFA_CODE'
+else
+    log 'ERROR' "unknown target (PROMPT = $PROMPT)"
+    exit 1
+fi
+
+# fetch the selected target from 1Password CLI
+OUTPUT=$(op run --env-file="$AWSKPASS/$VAULT.env" --no-masking -- zsh -c "echo \"\$$TARGET\"" 2>&1)
+EXIT_CODE=$?
+if [[ "$EXIT_CODE" != '0' ]]; then
+    log 'ERROR' "op($EXIT_CODE): $OUTPUT"
+    exit 1
+fi
+
+echo "$OUTPUT"
